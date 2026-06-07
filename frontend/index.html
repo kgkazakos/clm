@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cognitive Load Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0c0c0e;
+    --surface: #131316;
+    --surface2: #1a1a1f;
+    --border: rgba(255,255,255,0.07);
+    --border-active: rgba(255,255,255,0.18);
+    --text: #e8e8e8;
+    --text-muted: #6b6b7a;
+    --text-dim: #3a3a45;
+    --accent: #7c6bff;
+    --accent-glow: rgba(124,107,255,0.15);
+    --intrinsic: #5b8def;
+    --extraneous: #ef5b5b;
+    --germane: #5bef9a;
+    --mixed: #efb85b;
+    --high: #ef5b5b;
+    --moderate: #efb85b;
+    --low: #5bef9a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ─── Layout ─── */
+  .shell {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 32px;
+  }
+
+  header {
+    padding: 48px 0 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .wordmark {
+    font-family: 'Instrument Serif', serif;
+    font-size: 28px;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+
+  .wordmark span {
+    font-style: italic;
+    color: var(--accent);
+  }
+
+  .tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 2px;
+  }
+
+  /* ─── Grid ─── */
+  .grid {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* ─── Panel ─── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px;
+  }
+
+  .panel-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ─── Form elements ─── */
+  label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .format-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .format-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+
+  .format-btn:hover {
+    border-color: var(--border-active);
+  }
+
+  .format-btn.active {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .format-btn .fmt-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--text);
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .format-btn .fmt-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .upload-zone {
+    border: 1px dashed var(--border-active);
+    border-radius: 6px;
+    padding: 32px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 20px;
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  .upload-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    font-size: 24px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .upload-zone p {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .upload-zone .file-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--accent);
+    margin-top: 8px;
+  }
+
+  .field {
+    margin-bottom: 20px;
+  }
+
+  input[type=text], select, textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  input[type=text]:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+  }
+
+  select option { background: var(--surface2); }
+
+  .run-btn {
+    width: 100%;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    padding: 14px;
+    color: #fff;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-top: 8px;
+  }
+
+  .run-btn:hover:not(:disabled) {
+    background: #9d8fff;
+  }
+
+  .run-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* ─── Results ─── */
+  .results-panel {
+    display: none;
+  }
+
+  .results-panel.visible {
+    display: block;
+  }
+
+  .index-display {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 28px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .index-number {
+    font-family: 'Instrument Serif', serif;
+    font-size: 72px;
+    line-height: 1;
+    letter-spacing: -2px;
+  }
+
+  .index-meta { flex: 1; }
+
+  .index-band {
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .index-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .gauge {
+    width: 100%;
+    height: 4px;
+    background: var(--surface2);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+
+  .gauge-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  /* ─── Load type badge ─── */
+  .load-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px;
+    padding: 6px 14px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .load-badge.intrinsic  { background: rgba(91,141,239,0.12); color: var(--intrinsic); border: 1px solid rgba(91,141,239,0.25); }
+  .load-badge.extraneous { background: rgba(239,91,91,0.12);  color: var(--extraneous); border: 1px solid rgba(239,91,91,0.25); }
+  .load-badge.germane    { background: rgba(91,239,154,0.12); color: var(--germane);   border: 1px solid rgba(91,239,154,0.25); }
+  .load-badge.mixed      { background: rgba(239,184,91,0.12); color: var(--mixed);     border: 1px solid rgba(239,184,91,0.25); }
+
+  /* ─── Signal bars ─── */
+  .signal-list { margin-bottom: 28px; }
+
+  .signal-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .signal-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    width: 130px;
+    flex-shrink: 0;
+  }
+
+  .signal-bar-track {
+    flex: 1;
+    height: 4px;
+    background: var(--surface2);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .signal-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.6s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .signal-score {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    width: 32px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  /* ─── Hypothesis block ─── */
+  .hypothesis-block {
+    background: var(--surface2);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+
+  .hypothesis-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .hypothesis-text {
+    font-family: 'Instrument Serif', serif;
+    font-size: 16px;
+    line-height: 1.5;
+    font-style: italic;
+    color: var(--text);
+  }
+
+  /* ─── Hypothesis space ─── */
+  .hyp-space-item {
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hyp-space-item:last-child { border-bottom: none; }
+
+  .hyp-intervention {
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .hyp-citation {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  /* ─── Uncertainty flags ─── */
+  .flag {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .flag:last-child { border-bottom: none; }
+  .flag::before { content: '⚠'; font-size: 11px; margin-top: 2px; flex-shrink: 0; }
+
+  /* ─── Download buttons ─── */
+  .download-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .dl-btn {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    transition: all 0.15s;
+    display: block;
+  }
+
+  .dl-btn:hover {
+    border-color: var(--border-active);
+    color: var(--text);
+  }
+
+  /* ─── Loading state ─── */
+  .loading-state {
+    display: none;
+    padding: 48px 28px;
+    text-align: center;
+  }
+
+  .loading-state.visible { display: block; }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .loading-step {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+
+  /* ─── Empty state ─── */
+  .empty-state {
+    padding: 64px 28px;
+    text-align: center;
+    color: var(--text-dim);
+  }
+
+  .empty-state p {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+  }
+
+  /* ─── Section headers ─── */
+  .section-header {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    margin-top: 24px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-header:first-of-type { margin-top: 0; }
+
+  /* ─── Reasoning text ─── */
+  .reasoning-text {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.7;
+    margin-bottom: 20px;
+  }
+
+  .confidence-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .confidence-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .confidence-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  /* ─── Responsive ─── */
+  @media (max-width: 780px) {
+    .grid { grid-template-columns: 1fr; }
+    .header-inner { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header>
+    <div class="header-inner">
+      <div class="wordmark">Cognitive Load <span>Monitor</span></div>
+      <div class="tag">CPR — P3 // Kostas Kazakos</div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- ─── Left: Input panel ─── -->
+    <div class="panel">
+      <div class="panel-title">Session Analysis</div>
+
+      <!-- Format selector -->
+      <label>Input format</label>
+      <div class="format-grid">
+        <div class="format-btn active" data-format="canonical" onclick="selectFormat('canonical', this)">
+          <span class="fmt-name">Canonical</span>
+          <span class="fmt-desc">Custom logging</span>
+        </div>
+        <div class="format-btn" data-format="maze" onclick="selectFormat('maze', this)">
+          <span class="fmt-name">Maze</span>
+          <span class="fmt-desc">Export JSON</span>
+        </div>
+        <div class="format-btn" data-format="usertesting" onclick="selectFormat('usertesting', this)">
+          <span class="fmt-name">UserTesting</span>
+          <span class="fmt-desc">Export JSON</span>
+        </div>
+      </div>
+
+      <!-- File upload -->
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" accept=".json" onchange="handleFile(this)">
+        <span class="upload-icon">↑</span>
+        <p>Drop interaction log JSON here</p>
+        <div class="file-name" id="fileName"></div>
+      </div>
+
+      <!-- Context -->
+      <div class="field">
+        <label>Task description</label>
+        <input type="text" id="taskDesc"
+          placeholder="e.g. Complete checkout with promo code">
+      </div>
+
+      <div class="field">
+        <label>Interface type</label>
+        <select id="interfaceType">
+          <option value="web_app">Web App</option>
+          <option value="mobile">Mobile</option>
+          <option value="desktop">Desktop</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Participant ID (optional)</label>
+        <input type="text" id="participantId" placeholder="P01">
+      </div>
+
+      <button class="run-btn" id="runBtn" onclick="runAnalysis()" disabled>
+        Run Analysis
+      </button>
+    </div>
+
+    <!-- ─── Right: Results panel ─── -->
+    <div>
+      <!-- Empty state -->
+      <div class="panel" id="emptyState">
+        <div class="empty-state">
+          <p>Upload a session log to begin</p>
+        </div>
+      </div>
+
+      <!-- Loading state -->
+      <div class="panel loading-state" id="loadingState">
+        <div class="spinner"></div>
+        <div class="loading-step" id="loadingStep">Parsing interaction log...</div>
+      </div>
+
+      <!-- Results -->
+      <div class="panel results-panel" id="resultsPanel">
+
+        <!-- Composite index -->
+        <div class="index-display">
+          <div class="index-number" id="indexNumber">—</div>
+          <div class="index-meta">
+            <div class="index-band" id="indexBand">—</div>
+            <div class="index-sub" id="indexSub">—</div>
+            <div class="gauge">
+              <div class="gauge-fill" id="gaugeFill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Signal breakdown -->
+        <div class="section-header">Signal Breakdown</div>
+        <div class="signal-list" id="signalList"></div>
+
+        <!-- Load type + interpretation -->
+        <div class="section-header">AI Interpretation — Hypothesis</div>
+        <div id="loadBadge"></div>
+        <div class="confidence-row">
+          <span class="confidence-label">Confidence</span>
+          <span class="confidence-value" id="confidenceValue">—</span>
+        </div>
+        <div class="reasoning-text" id="reasoningText"></div>
+
+        <div class="hypothesis-block">
+          <div class="hypothesis-label">Researcher Hypothesis</div>
+          <div class="hypothesis-text" id="hypothesisText"></div>
+        </div>
+
+        <!-- Hypothesis space -->
+        <div class="section-header">Hypothesis Space</div>
+        <div id="hypothesisSpace"></div>
+
+        <!-- Uncertainty flags -->
+        <div id="flagsSection" style="display:none">
+          <div class="section-header">Uncertainty Flags</div>
+          <div id="flagsList"></div>
+        </div>
+
+        <!-- Downloads -->
+        <div class="download-row">
+          <a class="dl-btn" id="dlJson" href="#" target="_blank">↓ JSON Report</a>
+          <a class="dl-btn" id="dlMd" href="#" target="_blank">↓ Markdown Report</a>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let selectedFormat = 'canonical';
+let uploadedEvents = null;
+let sessionId = null;
+
+const SIGNAL_LABELS = {
+  dwell_time:        'Dwell Time',
+  error_recovery:    'Error Recovery',
+  hesitation:        'Hesitation',
+  task_switching:    'Task Switching',
+  mouse_trajectory:  'Mouse Trajectory',
+  scroll_behaviour:  'Scroll Behaviour',
+  input_retry:       'Input Retry',
+};
+
+function selectFormat(fmt, el) {
+  selectedFormat = fmt;
+  document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function handleFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('fileName').textContent = file.name;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      // Support both array of events and wrapped formats
+      uploadedEvents = Array.isArray(data) ? data
+        : data.recordings || data.interactions || data.events || [];
+      document.getElementById('runBtn').disabled = false;
+    } catch {
+      alert('Could not parse JSON file. Please check the format.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function band(index) {
+  if (index >= 80) return { label: 'Very High', color: '#ef5b5b' };
+  if (index >= 60) return { label: 'High',      color: '#efb85b' };
+  if (index >= 40) return { label: 'Moderate',  color: '#efb85b' };
+  if (index >= 20) return { label: 'Low',        color: '#5bef9a' };
+  return                   { label: 'Very Low',  color: '#5bef9a' };
+}
+
+function gaugeColor(index) {
+  if (index >= 70) return '#ef5b5b';
+  if (index >= 40) return '#efb85b';
+  return '#5bef9a';
+}
+
+function loadSteps() {
+  const steps = [
+    'Parsing interaction log...',
+    'Computing signal scores...',
+    'Calculating composite index...',
+    'Running CLT interpretation agent...',
+    'Generating hypothesis...',
+  ];
+  let i = 0;
+  return setInterval(() => {
+    document.getElementById('loadingStep').textContent = steps[i % steps.length];
+    i++;
+  }, 1800);
+}
+
+async function runAnalysis() {
+  if (!uploadedEvents) return;
+
+  // Show loading
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultsPanel').classList.remove('visible');
+  document.getElementById('loadingState').classList.add('visible');
+  document.getElementById('runBtn').disabled = true;
+
+  const stepInterval = loadSteps();
+
+  try {
+    const body = {
+      format: selectedFormat,
+      events: uploadedEvents,
+      context: {
+        task_description: document.getElementById('taskDesc').value,
+        interface_type:   document.getElementById('interfaceType').value,
+        participant_id:   document.getElementById('participantId').value || null,
+      }
+    };
+
+    const res = await fetch(`${API}/api/analyse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Analysis failed');
+    }
+
+    const data = await res.json();
+    clearInterval(stepInterval);
+    renderResults(data);
+
+  } catch(err) {
+    clearInterval(stepInterval);
+    document.getElementById('loadingState').classList.remove('visible');
+    document.getElementById('emptyState').style.display = '';
+    document.getElementById('runBtn').disabled = false;
+    alert(`Error: ${err.message}\n\nMake sure the backend is running on port 8000.`);
+  }
+}
+
+function renderResults(data) {
+  sessionId = data.session_id;
+
+  // Hide loading, show results
+  document.getElementById('loadingState').classList.remove('visible');
+  document.getElementById('resultsPanel').classList.add('visible');
+
+  // Index
+  const idx = data.composite_index;
+  const b = band(idx);
+  document.getElementById('indexNumber').textContent = idx;
+  document.getElementById('indexNumber').style.color = gaugeColor(idx);
+  document.getElementById('indexBand').textContent = b.label + ' Cognitive Load';
+  document.getElementById('indexBand').style.color = b.color;
+  document.getElementById('indexSub').textContent =
+    `${data.event_count} events · ${(data.duration_ms/1000).toFixed(1)}s session`;
+  const fill = document.getElementById('gaugeFill');
+  fill.style.width = idx + '%';
+  fill.style.background = gaugeColor(idx);
+
+  // Signals
+  const signalList = document.getElementById('signalList');
+  signalList.innerHTML = '';
+  const signals = data.signal_breakdown;
+  Object.keys(SIGNAL_LABELS).forEach(key => {
+    const s = signals[key];
+    const div = document.createElement('div');
+    div.className = 'signal-row';
+    div.innerHTML = `
+      <span class="signal-name">${SIGNAL_LABELS[key]}</span>
+      <div class="signal-bar-track">
+        <div class="signal-bar-fill" style="width:${s.score}%"></div>
+      </div>
+      <span class="signal-score">${s.score}</span>
+    `;
+    signalList.appendChild(div);
+  });
+
+  // Load type badge
+  const lt = data.agent_output.dominant_load_type;
+  const ltLabels = {
+    intrinsic:  'Intrinsic — Task Complexity',
+    extraneous: 'Extraneous — Interface Load',
+    germane:    'Germane — Schema Building',
+    mixed:      'Mixed — Multiple Sources',
+  };
+  document.getElementById('loadBadge').innerHTML =
+    `<div class="load-badge ${lt}">${ltLabels[lt] || lt}</div>`;
+
+  document.getElementById('confidenceValue').textContent =
+    data.agent_output.confidence;
+  document.getElementById('reasoningText').textContent =
+    data.agent_output.classification_reasoning;
+  document.getElementById('hypothesisText').textContent =
+    data.agent_output.hypothesis;
+
+  // Hypothesis space
+  const hypSpace = document.getElementById('hypothesisSpace');
+  hypSpace.innerHTML = '';
+  data.agent_output.hypothesis_space.forEach(entry => {
+    const div = document.createElement('div');
+    div.className = 'hyp-space-item';
+    div.innerHTML = `
+      <div class="hyp-intervention">${entry.intervention}</div>
+      <div class="hyp-citation">${entry.citation}</div>
+    `;
+    hypSpace.appendChild(div);
+  });
+
+  // Flags
+  const flags = data.agent_output.uncertainty_flags;
+  if (flags && flags.length > 0) {
+    document.getElementById('flagsSection').style.display = '';
+    const flagsList = document.getElementById('flagsList');
+    flagsList.innerHTML = '';
+    flags.forEach(f => {
+      const div = document.createElement('div');
+      div.className = 'flag';
+      div.textContent = f;
+      flagsList.appendChild(div);
+    });
+  } else {
+    document.getElementById('flagsSection').style.display = 'none';
+  }
+
+  // Download links
+  document.getElementById('dlJson').href =
+    `${API}/api/report/${sessionId}?format=json`;
+  document.getElementById('dlMd').href =
+    `${API}/api/report/${sessionId}?format=md`;
+
+  document.getElementById('runBtn').disabled = false;
+}
+
+// Drag and drop
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (!file || !file.name.endsWith('.json')) return;
+  document.getElementById('fileName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      uploadedEvents = Array.isArray(data) ? data
+        : data.recordings || data.interactions || data.events || [];
+      document.getElementById('runBtn').disabled = false;
+    } catch { alert('Could not parse JSON file.'); }
+  };
+  reader.readAsText(file);
+});
+</script>
+</body>
+</html>

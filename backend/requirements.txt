@@ -1,0 +1,10 @@
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+python-multipart>=0.0.9
+
+# LLM providers — install the one matching your LLM_PROVIDER setting
+google-genai>=1.0.0        # LLM_PROVIDER=gemini (default)
+openai>=1.0.0              # LLM_PROVIDER=openai
+anthropic>=0.25.0          # LLM_PROVIDER=anthropic
