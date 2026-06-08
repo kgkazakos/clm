@@ -1,7 +1,7 @@
 # Cognitive Load Monitor: From Interaction Telemetry to Researcher Hypothesis
 
 **Kostas Kazakos, PhD**
-Computational Product Research — Project 3
+Computational Product Research — Project 3 CPR Main
 Personal project, not affiliated with any employer.
 
 ---
