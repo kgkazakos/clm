@@ -1,6 +1,6 @@
 # Cognitive Load Monitor
 
-**Computational Product Research — Project 3**
+**Computational Product Research Main — Project 3**
 Personal project, not affiliated with any employer.
 
 > "Most usability tools tell you what users did. This one tells you how hard they were working — and why."
