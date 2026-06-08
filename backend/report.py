@@ -8,10 +8,11 @@ from models import AnalysisResult, LoadType
 
 
 _LOAD_TYPE_LABELS = {
-    LoadType.INTRINSIC:  "INTRINSIC — Inherent task complexity",
-    LoadType.EXTRANEOUS: "EXTRANEOUS — Interface design load",
-    LoadType.GERMANE:    "GERMANE — Productive schema-building",
-    LoadType.MIXED:      "MIXED — Multiple load sources",
+    LoadType.INTRINSIC:    "INTRINSIC — Inherent task complexity",
+    LoadType.EXTRANEOUS:   "EXTRANEOUS — Interface design load",
+    LoadType.GERMANE:      "GERMANE — Productive schema-building",
+    LoadType.OVERLOAD:     "OVERLOAD — Intrinsic + Extraneous co-elevation",
+    LoadType.INCONCLUSIVE: "INCONCLUSIVE — No dominant signal pattern",
 }
 
 _INDEX_BAND = [

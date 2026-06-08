@@ -2,146 +2,160 @@
 Deterministic CLT load type classifier — Layer 1.
 
 Classifies dominant cognitive load type using signal pattern heuristics
-derived from Sweller's Cognitive Load Theory taxonomy. This is an
-algorithmic decision tree, not an LLM call.
+derived from Sweller's Cognitive Load Theory taxonomy.
 
-Rationale for moving classification to Layer 1:
-If the classification logic maps directly from observable telemetry
-patterns to CLT load types — as it does here — a deterministic heuristic
-is preferable to an LLM for this task. It is faster, cheaper, reproducible,
-and eliminates hallucination risk. The LLM's generative strengths are
-reserved for Layer 2: producing the researcher hypothesis, analysing task
-context, and surfacing relevant prior literature.
+EXACT THRESHOLDS (deterministic — no qualitative language):
+  HIGH  : score ≥ 50  (upper half of normalised 0–100 range)
+  MEDIUM: score 25–49 (lower-middle range)
+  LOW   : score < 25  (bottom quarter)
 
-Classification rules:
-These rules encode the signal-to-load-type mappings from CLT literature.
-They are heuristic, not exhaustive — real sessions often present mixed
-signals. The MIXED type is the correct classification when no single type
-clearly dominates.
+These thresholds are provisional pending the N=20 validation study.
+PCA on signal scores against NASA-TLX subscale ratings will determine
+whether empirically grounded cutoffs differ from these heuristic values.
 
-  INTRINSIC: Load from task complexity, not interface failure.
-  Signature: high hesitation AND high dwell, with low error rate.
-  Interpretation: user is deliberating carefully on complex content,
-  not struggling with the interface.
+CLASSIFICATION RULES:
 
-  EXTRANEOUS: Load from interface design failures.
-  Signature: high error_recovery OR high task_switching OR high input_retry.
-  Interpretation: interface is obstructing task completion — errors,
-  repeated navigation, or repeated inputs signal schema mismatch with UI.
+  OVERLOAD (High Intrinsic + High Extraneous):
+  Both intrinsic complexity signals (hesitation ≥ 50 AND dwell ≥ 50)
+  AND at least one extraneous interface signal (error_recovery, task_switching,
+  or input_retry ≥ 50) are simultaneously elevated. Per CLT's additive model
+  (Sweller, 1988), intrinsic and extraneous load sum to total working memory
+  demand. Co-elevation of both types represents the most critical failure state:
+  the interface is adding unnecessary load on top of an already complex task.
+  This is cognitively distinct from "mixed" or "uncertain" — it is Overload.
 
-  GERMANE: Productive schema-building load.
-  Signature: moderate hesitation, low errors, moderate mouse efficiency.
-  Interpretation: user is engaged and building understanding, not struggling.
-  This is the rarest classification in short sessions.
+  EXTRANEOUS (Interface-driven load, no intrinsic co-elevation):
+  One or more interface obstruction signals ≥ 50 (error_recovery, task_switching,
+  input_retry), with hesitation < 50 OR dwell < 50 (no clear intrinsic signature).
 
-  MIXED: Multiple load sources co-present, no single type dominates.
-  Signature: signals from multiple categories above threshold simultaneously,
-  or no signals sufficiently elevated to classify.
+  INTRINSIC (Task complexity, no interface obstruction):
+  Deliberation signals both elevated (hesitation ≥ 50 AND dwell ≥ 50) with
+  all interface obstruction signals < 50.
+
+  GERMANE (Productive schema-building):
+  Moderate hesitation (25 ≤ hesitation < 50), low error recovery (< 25),
+  low input retry (< 25), and moderate mouse trajectory (< 50).
+  Rare in short sessions; indicates engaged, efficient learning.
+
+  INCONCLUSIVE (No dominant pattern):
+  Signal pattern does not meet any of the above thresholds. Composite index
+  is low-to-moderate with no specific signals sufficiently elevated to
+  support a classification. Researcher interpretation required.
+
+Note on MIXED vs OVERLOAD/INCONCLUSIVE:
+The previous MIXED classification conflated two meaningfully different states
+that CLT treats as distinct. OVERLOAD is not "uncertain" — it is the state
+where total cognitive demand most likely exceeds working memory capacity.
+INCONCLUSIVE is the appropriate label when signals are genuinely ambiguous.
 """
 
 from models import LoadType, SignalBreakdown
 
+# ─── Exact numeric thresholds ─────────────────────────────────────────────────
 
-# ─── Classification thresholds ────────────────────────────────────────────────
-# These are heuristic thresholds, not empirically derived cutoffs.
-# They should be treated as provisional pending the N=20 validation study.
+HIGH:   float = 50.0   # score ≥ 50 → High band
+MEDIUM: float = 25.0   # score ≥ 25 → Medium band; score < 25 → Low band
 
-_HIGH   = 50.0   # signal score above this is considered elevated
-_MEDIUM = 30.0   # signal score above this is considered moderate
-_LOW    = 20.0   # signal score below this is considered low
+
+def _band(score: float) -> str:
+    if score >= HIGH:   return "High"
+    if score >= MEDIUM: return "Medium"
+    return "Low"
 
 
 def classify(breakdown: SignalBreakdown) -> tuple[LoadType, str]:
     """
     Classify dominant CLT load type from signal breakdown.
+    All threshold comparisons use exact numeric values defined above.
 
     Returns:
         load_type: the classified LoadType
-        reasoning: a one-sentence description of the signal pattern rationale
+        reasoning: one-sentence description of the signal pattern
     """
-    d  = breakdown.dwell_time.score
-    er = breakdown.error_recovery.score
-    h  = breakdown.hesitation.score
-    ts = breakdown.task_switching.score
-    mt = breakdown.mouse_trajectory.score
-    sb = breakdown.scroll_behaviour.score
-    ir = breakdown.input_retry.score
+    d  = breakdown.dwell_time.score        # deliberation cost
+    er = breakdown.error_recovery.score    # interface obstruction
+    h  = breakdown.hesitation.score        # decision bottleneck
+    ts = breakdown.task_switching.score    # split-attention
+    mt = breakdown.mouse_trajectory.score  # attentional switching
+    sb = breakdown.scroll_behaviour.score  # spatial disorientation
+    ir = breakdown.input_retry.score       # working memory strain
 
-    # ── Extraneous indicators: interface obstruction ───────────────────────────
-    # Any of these signals being highly elevated suggests extraneous load.
-    extraneous_signals = [
-        ("error_recovery", er >= _HIGH),
-        ("task_switching",  ts >= _HIGH),
-        ("input_retry",     ir >= _HIGH),
-    ]
-    extraneous_count = sum(1 for _, v in extraneous_signals if v)
-    extraneous_names = [name for name, v in extraneous_signals if v]
+    # ── Intrinsic signal pattern ──────────────────────────────────────────────
+    # Both deliberation signals must be in the High band
+    intrinsic_elevated = (h >= HIGH and d >= HIGH)
 
-    # ── Intrinsic indicators: task complexity ─────────────────────────────────
-    # High deliberation (dwell + hesitation) with low error rate suggests
-    # the user is carefully processing complex content, not fighting the UI.
-    intrinsic = (
-        h >= _MEDIUM and
-        d >= _HIGH and
-        er < _LOW
-    )
+    # ── Extraneous signal pattern ─────────────────────────────────────────────
+    # Any single interface obstruction signal in the High band
+    extraneous_signals = {
+        "error_recovery": er >= HIGH,
+        "task_switching":  ts >= HIGH,
+        "input_retry":     ir >= HIGH,
+    }
+    extraneous_count = sum(extraneous_signals.values())
+    extraneous_names = [k for k, v in extraneous_signals.items() if v]
 
-    # ── Germane indicators: productive schema-building ────────────────────────
-    # Moderate hesitation with low errors and moderate mouse efficiency.
-    # Germane load is desirable — user is actively learning/building models.
+    # ── Germane pattern ───────────────────────────────────────────────────────
     germane = (
-        _LOW <= h < _HIGH and
-        er < _LOW and
-        mt < _HIGH and
-        ir < _LOW
+        MEDIUM <= h < HIGH and    # moderate hesitation
+        er < MEDIUM and           # low error recovery
+        ir < MEDIUM and           # low input retry
+        mt < HIGH                 # moderate trajectory
     )
 
-    # ── Classification decision ────────────────────────────────────────────────
+    # ── Classification ────────────────────────────────────────────────────────
 
-    if extraneous_count >= 2:
+    # OVERLOAD: intrinsic AND extraneous both elevated simultaneously
+    # Per CLT additive model — this is the highest severity state
+    if intrinsic_elevated and extraneous_count >= 1:
         return (
-            LoadType.EXTRANEOUS,
-            f"Multiple interface obstruction signals elevated "
-            f"({', '.join(extraneous_names)}), indicating extraneous load "
-            f"from design failures rather than task complexity."
+            LoadType.OVERLOAD,
+            f"Intrinsic load signals (hesitation {h:.0f} ≥ {HIGH:.0f}, "
+            f"dwell {d:.0f} ≥ {HIGH:.0f}) and extraneous signal(s) "
+            f"({', '.join(f'{n} {breakdown.__dict__[n].score:.0f}' for n in extraneous_names)}) "
+            f"are simultaneously in the High band (≥ {HIGH:.0f}). "
+            f"Per CLT's additive model, total working memory demand likely "
+            f"approaches or exceeds capacity."
         )
 
-    if extraneous_count == 1 and not intrinsic:
+    # EXTRANEOUS: interface obstruction without intrinsic co-elevation
+    if extraneous_count >= 1 and not intrinsic_elevated:
         return (
             LoadType.EXTRANEOUS,
-            f"{extraneous_names[0].replace('_', ' ').title()} is elevated "
-            f"with no clear intrinsic load signature, suggesting "
-            f"interface-driven extraneous load."
+            f"Interface obstruction signal(s) in the High band (≥ {HIGH:.0f}): "
+            f"{', '.join(extraneous_names)}. "
+            f"Deliberation signals below High threshold "
+            f"(hesitation {h:.0f}, dwell {d:.0f}), "
+            f"indicating interface-driven load rather than task complexity."
         )
 
-    if intrinsic and extraneous_count == 0:
+    # INTRINSIC: deliberation elevated, no interface obstruction
+    if intrinsic_elevated and extraneous_count == 0:
         return (
             LoadType.INTRINSIC,
-            f"High deliberation signals (dwell: {d:.0f}, hesitation: {h:.0f}) "
-            f"with low error rate ({er:.0f}) indicate intrinsic load "
-            f"from task complexity rather than interface failure."
+            f"Deliberation signals in the High band: "
+            f"hesitation {h:.0f} ≥ {HIGH:.0f}, dwell {d:.0f} ≥ {HIGH:.0f}. "
+            f"All interface obstruction signals below High threshold "
+            f"(error_recovery {er:.0f}, task_switching {ts:.0f}, "
+            f"input_retry {ir:.0f}), indicating task complexity "
+            f"rather than interface failure."
         )
 
-    if germane and extraneous_count == 0 and not intrinsic:
+    # GERMANE: moderate hesitation, low errors, moderate efficiency
+    if germane:
         return (
             LoadType.GERMANE,
-            f"Moderate hesitation ({h:.0f}) with low errors ({er:.0f}) "
-            f"and moderate trajectory ({mt:.0f}) indicates productive "
-            f"schema-building load."
+            f"Hesitation in the Medium band ({h:.0f}, {MEDIUM:.0f}–{HIGH:.0f}), "
+            f"error recovery below Medium ({er:.0f} < {MEDIUM:.0f}), "
+            f"and input retry below Medium ({ir:.0f} < {MEDIUM:.0f}). "
+            f"Pattern consistent with productive schema-building load."
         )
 
-    if extraneous_count >= 1 and intrinsic:
-        return (
-            LoadType.MIXED,
-            f"Both intrinsic (dwell: {d:.0f}, hesitation: {h:.0f}) and "
-            f"extraneous ({', '.join(extraneous_names)}) signals are elevated, "
-            f"indicating co-present load sources."
-        )
-
+    # INCONCLUSIVE: no threshold met
     return (
-        LoadType.MIXED,
-        f"No single load type clearly dominates the signal pattern "
-        f"(error_recovery: {er:.0f}, hesitation: {h:.0f}, "
-        f"task_switching: {ts:.0f}, input_retry: {ir:.0f}). "
-        f"Researcher interpretation recommended."
+        LoadType.INCONCLUSIVE,
+        f"No signal pattern meets the classification thresholds "
+        f"(High ≥ {HIGH:.0f}, Medium ≥ {MEDIUM:.0f}). "
+        f"Scores: error_recovery {er:.0f}, hesitation {h:.0f}, "
+        f"task_switching {ts:.0f}, input_retry {ir:.0f}, dwell {d:.0f}. "
+        f"Researcher interpretation required."
     )

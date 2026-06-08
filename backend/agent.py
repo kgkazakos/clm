@@ -57,7 +57,8 @@ You have received:
    - INTRINSIC: load from inherent task complexity
    - EXTRANEOUS: load from interface design failures
    - GERMANE: productive schema-building load
-   - MIXED: multiple co-present load sources
+   - OVERLOAD: high intrinsic + high extraneous load simultaneously (cognitive overload state)
+   - INCONCLUSIVE: no dominant signal pattern detected
 4. The algorithmic reasoning behind that classification
 5. Session context: task description and interface type
 
