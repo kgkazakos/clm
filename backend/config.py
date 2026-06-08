@@ -7,22 +7,22 @@ Set LLM_PROVIDER in your .env to switch interpretation layer:
   openai    — GPT-4o
   anthropic — Claude Sonnet
 
-Theory-derived signal weights (v1.1 — recalibrated after validation):
+Theory-derived signal weights (v1.0 — primary published instrument):
 Each weight reflects the documented effect size of that telemetry signal
-as a cognitive load proxy in the source literature.
+as a cognitive load proxy in the source literature. Weights are normalised
+effect sizes, reviewed against NASA-TLX mental demand subscale correlations.
 
-v1.0 → v1.1 change:
-  mouse_trajectory reduced from 0.20 → 0.12.
-  Rationale: Path efficiency ratio saturated in both low-load and high-load
-  sessions during initial validation (scores of 98.5 and 99.9 respectively),
-  providing no discriminant signal between conditions. The 0.08 reduction was
-  redistributed to task_switching (+0.04) and hesitation (+0.04), both of
-  which showed strong discriminant validity in the validation study
-  (task_switching: 0.0 vs 44.2; hesitation: 13.6 vs 23.6 across sessions).
-  The original weight was based on Guo et al. (2016) r=0.71 with NASA-TLX,
-  which remains valid as a general proxy but overstates discriminative power
-  in multi-page web application contexts where non-linear cursor movement
-  is structurally induced by layout rather than cognitive load alone.
+These are the weights used in the published validation study and reported
+in the whitepaper. They should not be changed without a formal validation
+study (N ≥ 20) justifying the adjustment.
+
+Hypothesised v1.1 recalibration (NOT active — pending N=20 validation):
+The initial validation study (N=1) observed mouse_trajectory saturation in
+both low-load and high-load sessions (scores 98.5 and 99.9), providing no
+discriminant signal. A hypothesised recalibration (mouse_trajectory: 0.20→0.12,
+task_switching: 0.18→0.22, hesitation: 0.16→0.20) is documented here but
+NOT applied, as adjusting weights based on a single biased trial constitutes
+overfitting. This recalibration will be evaluated in the N=20 study.
 
 Literature anchors:
 - Sweller (1988): Cognitive load during problem solving
@@ -69,38 +69,45 @@ if not _key_value:
         f"LLM_PROVIDER is set to '{LLM_PROVIDER}' but {_key_name} is missing from .env"
     )
 
-# ─── Signal weights v1.1 ──────────────────────────────────────────────────────
+# ─── Signal weights v1.0 (primary — literature-derived) ──────────────────────
 
 SIGNAL_WEIGHTS: dict[str, float] = {
-    # Sweller et al. (1998): split-attention effect — strongest discriminant
-    # signal in v1.0 validation (0.0 vs 44.2 across sessions). Weight increased
-    # from 0.18 to 0.22 to reflect observed discriminant validity.
-    "task_switching":   0.22,
+    # Guo et al. (2016): strongest single predictor (r=0.71 with NASA-TLX)
+    "mouse_trajectory": 0.20,
 
-    # Paas & van Merriënboer (1994): hesitation duration predicts effort ratings.
-    # Weight increased from 0.16 to 0.20 to reflect validation findings.
-    "hesitation":       0.20,
-
-    # Sweller (1988): direct working memory overload indicator.
+    # Sweller (1988): direct working memory overload indicator
     "error_recovery":   0.18,
 
-    # Jiang et al. (2015): dwell time and perceived task difficulty (r=0.65).
+    # Sweller et al. (1998): split-attention effect
+    "task_switching":   0.18,
+
+    # Paas & van Merriënboer (1994): hesitation duration predicts effort ratings
+    "hesitation":       0.16,
+
+    # Jiang et al. (2015): dwell time and perceived task difficulty (r=0.65)
     "dwell_time":       0.14,
 
-    # Guo et al. (2016): mouse trajectory as cognitive load proxy (r=0.71).
-    # Weight reduced from 0.20 to 0.12 — see recalibration note above.
-    "mouse_trajectory": 0.12,
-
-    # Sweller (1988): retry rate as working memory strain indicator.
+    # Sweller (1988): working memory strain indicator
     "input_retry":      0.08,
 
-    # Rodrigues et al. (2020): scroll variance and spatial disorientation.
+    # Rodrigues et al. (2020): scroll variance and spatial disorientation
     "scroll_behaviour": 0.06,
 }
 
 assert abs(sum(SIGNAL_WEIGHTS.values()) - 1.0) < 1e-9, "Weights must sum to 1.0"
 
+# ─── Hypothesised v1.1 weights (NOT active — see docstring above) ─────────────
+# HYPOTHESISED_V1_1_WEIGHTS = {
+#     "task_switching":   0.22,  # +0.04 — strong discriminant in pilot
+#     "hesitation":       0.20,  # +0.04 — strong discriminant in pilot
+#     "error_recovery":   0.18,
+#     "dwell_time":       0.14,
+#     "mouse_trajectory": 0.12,  # -0.08 — saturated in pilot, context boundary
+#     "input_retry":      0.08,
+#     "scroll_behaviour": 0.06,
+# }
+
 # ─── Thresholds ────────────────────────────────────────────────────────────────
-HESITATION_THRESHOLD_MS: int = 2000
+HESITATION_THRESHOLD_MS: int = 2_000
 LOW_LOAD_THRESHOLD: int      = 40
 HIGH_LOAD_THRESHOLD: int     = 70

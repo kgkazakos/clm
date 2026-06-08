@@ -1,22 +1,29 @@
 """
-Layer 2: AI interpretation agent — multi-provider.
+Layer 2: AI interpretation agent — hypothesis generation only.
 
-Supports Gemini, OpenAI, and Anthropic as interpretation backends.
-Provider is set via LLM_PROVIDER in .env.
+The CLT load type classification has been moved to Layer 1 (classifier.py)
+as a deterministic algorithmic heuristic. This is correct separation of
+concerns: deterministic signal-pattern classification does not benefit from
+generative AI, and using an LLM for it introduced unnecessary latency, cost,
+and hallucination risk.
 
-The interpretation task is identical across providers:
-- Receive composite index + signal breakdown + session context
-- Classify dominant CLT load type (intrinsic / extraneous / germane / mixed)
-- Generate researcher hypothesis
-- Surface hypothesis space from prior literature
-- Flag measurement uncertainty
+This agent's role is strictly generative:
+1. Receive the pre-classified load type from Layer 1
+2. Analyse task context to generate a researcher-facing hypothesis
+   about WHY the classified load type is present
+3. Surface prior work from the HCI/CLT literature addressing
+   the identified load class — framed as hypothesis space, not prescription
+4. Flag measurement uncertainty where telemetry may be unreliable
 
-Output is explicitly a hypothesis for researcher evaluation — not a finding.
+The LLM's generative strengths — contextual reasoning, literature synthesis,
+natural language hypothesis generation — are applied here. The classification
+itself is deterministic and reproducible.
 """
 
 import json
 import re
-from typing import Any
+
+import google.genai as genai
 
 from config import (
     ANTHROPIC_API_KEY,
@@ -35,39 +42,42 @@ from models import (
     SignalBreakdown,
 )
 
-# ─── Shared prompt ────────────────────────────────────────────────────────────
+# ─── System prompt ─────────────────────────────────────────────────────────────
+# Note: load type classification is NOT requested here.
+# It has been determined algorithmically in Layer 1 (classifier.py).
+# The agent's task is to reason about WHY the classified load type is present,
+# generate a researcher hypothesis, and surface prior work.
 
 _SYSTEM_PROMPT = """You are a cognitive load theorist assisting a UX researcher.
 
-You will receive:
+You have received:
 1. A composite cognitive load index (0-100)
-2. A breakdown of seven telemetry signals, each with a score and interpretation
-3. Session context (task description, interface type)
+2. A breakdown of seven telemetry signals with scores and interpretations
+3. The dominant load type, already classified algorithmically:
+   - INTRINSIC: load from inherent task complexity
+   - EXTRANEOUS: load from interface design failures
+   - GERMANE: productive schema-building load
+   - MIXED: multiple co-present load sources
+4. The algorithmic reasoning behind that classification
+5. Session context: task description and interface type
 
-Your task is to reason about which type of cognitive load is dominant,
-following Sweller's Cognitive Load Theory taxonomy:
+Your task is to:
+1. Generate a researcher-facing hypothesis about WHY the classified load type
+   is present — what specifically about the task or interface is causing it
+2. Surface 2-4 prior work entries from HCI/CLT literature that have addressed
+   this load type in comparable contexts
+3. Identify specific uncertainty flags where the telemetry measurement may be
+   unreliable or ambiguous
 
-- INTRINSIC: Load from inherent task complexity — the task itself is difficult
-  regardless of interface design. Signals: high hesitation + high dwell time
-  with low error rate suggests deliberate, careful processing of complex content.
+You are NOT asked to classify the load type — that has already been done.
+Your value is in contextual interpretation and literature synthesis.
 
-- EXTRANEOUS: Load introduced by interface design failures — the task is being
-  made harder than necessary by poor design. Signals: high error recovery +
-  high task switching + high input retry suggests the interface is obstructing
-  task completion.
-
-- GERMANE: Productive cognitive effort invested in building schemas and
-  understanding — this is desirable load. Signals: moderate hesitation with
-  low error rate and efficient mouse paths suggests the user is learning and
-  building mental models.
-
-- MIXED: No single type clearly dominates — multiple load sources co-present.
+Frame all output as hypothesis for researcher evaluation, not as findings.
+Interventions should be framed as prior work findings, not prescriptions.
 
 Output ONLY a valid JSON object with this exact structure:
 {
-  "dominant_load_type": "intrinsic" | "extraneous" | "germane" | "mixed",
-  "classification_reasoning": "2-3 sentence reasoning citing specific signal values",
-  "hypothesis": "One precise sentence stating the researcher hypothesis. Frame as hypothesis, not finding.",
+  "hypothesis": "One precise sentence stating the researcher hypothesis about WHY this load type is present, given the task context and signal pattern.",
   "hypothesis_space": [
     {
       "intervention": "Description of intervention from prior work",
@@ -75,15 +85,14 @@ Output ONLY a valid JSON object with this exact structure:
       "load_type_addressed": "intrinsic" | "extraneous" | "germane"
     }
   ],
-  "uncertainty_flags": ["List of specific uncertainty flags where measurement may be unreliable"],
+  "uncertainty_flags": ["List of specific, actionable uncertainty flags"],
   "confidence": "High" | "Moderate" | "Low"
 }
 
 Rules:
-- hypothesis_space must contain 2-4 entries from real HCI/CLT literature
-- Each entry must address the dominant load type identified
-- Frame interventions as prior work findings, not prescriptions
-- uncertainty_flags must be specific and actionable for the researcher
+- hypothesis must reference the task context if provided — generic hypotheses are not useful
+- hypothesis_space entries must be real HCI/CLT literature, not fabricated
+- uncertainty_flags must be specific to the observed signal pattern, not generic caveats
 - Do NOT use the words "frustration", "Say-Do", or "divergence"
 - Return ONLY valid JSON — no markdown fences, no preamble"""
 
@@ -104,16 +113,20 @@ def _format_breakdown(breakdown: SignalBreakdown) -> str:
 def _build_user_message(
     composite_index: float,
     breakdown: SignalBreakdown,
+    load_type: LoadType,
+    classification_reasoning: str,
     context: SessionContext,
 ) -> str:
     return (
         f"Composite cognitive load index: {composite_index}/100\n\n"
         f"Signal breakdown:\n{_format_breakdown(breakdown)}\n\n"
+        f"Algorithmically classified load type: {load_type.value.upper()}\n"
+        f"Classification reasoning: {classification_reasoning}\n\n"
         f"Session context:\n"
         f"  Task: {context.task_description or 'Not provided'}\n"
         f"  Interface type: {context.interface_type}\n"
         f"  Participant: {context.participant_id or 'Anonymous'}\n\n"
-        f"Classify the dominant load type and generate the researcher hypothesis."
+        f"Generate the researcher hypothesis and hypothesis space for this load type."
     )
 
 
@@ -124,18 +137,14 @@ def _extract_json(text: str) -> dict:
     return json.loads(text)
 
 
-def _parse_output(raw: dict) -> AgentOutput:
-    load_type_map = {
-        "intrinsic":  LoadType.INTRINSIC,
-        "extraneous": LoadType.EXTRANEOUS,
-        "germane":    LoadType.GERMANE,
-        "mixed":      LoadType.MIXED,
-    }
+def _parse_output(
+    raw: dict,
+    load_type: LoadType,
+    classification_reasoning: str,
+) -> AgentOutput:
     return AgentOutput(
-        dominant_load_type=load_type_map.get(
-            raw["dominant_load_type"].lower(), LoadType.MIXED
-        ),
-        classification_reasoning=raw["classification_reasoning"],
+        dominant_load_type=load_type,
+        classification_reasoning=classification_reasoning,
         hypothesis=raw["hypothesis"],
         hypothesis_space=[
             HypothesisSpaceEntry(**e) for e in raw.get("hypothesis_space", [])
@@ -183,8 +192,6 @@ def _call_anthropic(user_message: str) -> dict:
     return _extract_json(response.content[0].text)
 
 
-# ─── Router ───────────────────────────────────────────────────────────────────
-
 _PROVIDERS = {
     "gemini":    _call_gemini,
     "openai":    _call_openai,
@@ -195,13 +202,17 @@ _PROVIDERS = {
 def interpret(
     composite_index: float,
     breakdown: SignalBreakdown,
+    load_type: LoadType,
+    classification_reasoning: str,
     context: SessionContext,
 ) -> AgentOutput:
     """
-    Run the interpretation agent using the configured LLM provider.
-    Returns AgentOutput with load type classification and researcher hypothesis.
+    Generate researcher hypothesis and hypothesis space for the
+    pre-classified load type. Classification is NOT performed here.
     """
-    user_message = _build_user_message(composite_index, breakdown, context)
+    user_message = _build_user_message(
+        composite_index, breakdown, load_type, classification_reasoning, context
+    )
     caller = _PROVIDERS[LLM_PROVIDER]
     raw = caller(user_message)
-    return _parse_output(raw)
+    return _parse_output(raw, load_type, classification_reasoning)

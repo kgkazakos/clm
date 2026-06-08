@@ -3,6 +3,12 @@ Cognitive Load Monitor — FastAPI backend
 Exposes two endpoints:
   POST /api/analyse  — run full analysis, return AnalysisResult
   GET  /api/report/{session_id} — download JSON or Markdown report
+
+Pipeline:
+  Layer 1 (deterministic):
+    adapters → signal calculators → composite index → CLT classifier
+  Layer 2 (generative):
+    LLM agent → researcher hypothesis → hypothesis space
 """
 
 import uuid
@@ -14,6 +20,7 @@ from fastapi.responses import FileResponse
 
 from agent import interpret
 from adapters import canonical, maze, usertesting
+from classifier import classify
 from composite import calculate as calculate_composite
 from config import LLM_PROVIDER
 from models import (
@@ -24,7 +31,7 @@ from models import (
 )
 from report import write_json, write_markdown
 
-app = FastAPI(title="Cognitive Load Monitor", version="1.0.0")
+app = FastAPI(title="Cognitive Load Monitor", version="1.1.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -38,9 +45,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 def _adapt(request: AnalysisRequest) -> list[InteractionEvent]:
-    """Route raw data through the correct adapter."""
     raw = [e.model_dump() for e in request.events]
-
     if request.format == InputFormat.CANONICAL:
         return canonical.parse(raw)
     elif request.format == InputFormat.MAZE:
@@ -55,8 +60,14 @@ def _adapt(request: AnalysisRequest) -> list[InteractionEvent]:
 async def analyse(request: AnalysisRequest) -> AnalysisResult:
     """
     Run the full two-layer cognitive load analysis.
-    Layer 1: telemetry signal calculators + composite index (pure Python)
-    Layer 2: LLM agent CLT classification + hypothesis generation
+
+    Layer 1 (deterministic):
+      - Telemetry signal calculators + composite index
+      - Algorithmic CLT load type classification
+
+    Layer 2 (generative):
+      - LLM hypothesis generation given the classified load type
+      - Literature surfacing from CLT/HCI prior work
     """
     if not request.events:
         raise HTTPException(status_code=400, detail="No events provided")
@@ -64,7 +75,7 @@ async def analyse(request: AnalysisRequest) -> AnalysisResult:
     session_id = str(uuid.uuid4())[:8]
     events = _adapt(request)
 
-    # Layer 1 — deterministic measurement
+    # ── Layer 1: deterministic measurement + classification ───────────────────
     composite_index, breakdown = calculate_composite(events)
 
     duration_ms = (
@@ -72,8 +83,17 @@ async def analyse(request: AnalysisRequest) -> AnalysisResult:
         if len(events) > 1 else 0
     )
 
-    # Layer 2 — AI interpretation (provider set via LLM_PROVIDER in .env)
-    agent_output = interpret(composite_index, breakdown, request.context)
+    # Deterministic CLT classification — no LLM involved
+    load_type, classification_reasoning = classify(breakdown)
+
+    # ── Layer 2: generative hypothesis + literature surfacing ─────────────────
+    agent_output = interpret(
+        composite_index=composite_index,
+        breakdown=breakdown,
+        load_type=load_type,
+        classification_reasoning=classification_reasoning,
+        context=request.context,
+    )
 
     result = AnalysisResult(
         session_id=session_id,
@@ -94,17 +114,14 @@ async def analyse(request: AnalysisRequest) -> AnalysisResult:
 
 @app.get("/api/report/{session_id}")
 async def get_report(session_id: str, format: str = "json") -> FileResponse:
-    """Download the report for a completed session."""
     ext = "json" if format == "json" else "md"
     path = OUTPUT_DIR / f"clm_report_{session_id}.{ext}"
-
     if not path.exists():
         raise HTTPException(status_code=404, detail="Report not found")
-
     media_type = "application/json" if ext == "json" else "text/markdown"
     return FileResponse(path, media_type=media_type, filename=path.name)
 
 
 @app.get("/api/health")
 async def health() -> dict:
-    return {"status": "ok", "version": "1.0.0", "provider": LLM_PROVIDER}
+    return {"status": "ok", "version": "1.1.0", "provider": LLM_PROVIDER}

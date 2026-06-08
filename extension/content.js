@@ -1,22 +1,27 @@
 /**
- * CLM Session Logger — content script v4
- * Fixes SVGAnimatedString className bug.
- * Pushes all events to background service worker.
+ * CLM Session Logger — content script v5
+ *
+ * Uses global sessionStart timestamp received from background.js
+ * so all events across the full multi-page session share an absolute
+ * time reference, not a per-page-load relative one.
  */
 
 let isRecording = false;
+let sessionStartMs = null;   // absolute epoch ms from background service worker
 let lastMouseX = null;
 let lastMouseY = null;
 let inputTimers = {};
-let sessionStartMs = null;
 
-function ts() { return sessionStartMs ? Date.now() - sessionStartMs : 0; }
-function normX(x) { return Math.round((x / window.innerWidth) * 100) / 100; }
+function ts() {
+  // Always relative to global session start, not page load
+  return sessionStartMs ? Date.now() - sessionStartMs : 0;
+}
+
+function normX(x) { return Math.round((x / window.innerWidth)  * 100) / 100; }
 function normY(y) { return Math.round((y / window.innerHeight) * 100) / 100; }
 
 function elementId(el) {
   if (!el) return null;
-  // className can be SVGAnimatedString on SVG elements — guard with typeof check
   const cls = typeof el.className === 'string'
     ? (el.className.split(' ')[0] || null)
     : null;
@@ -29,7 +34,7 @@ function push(event) {
   chrome.runtime.sendMessage({ action: 'push_event', event }).catch(() => {});
 }
 
-// ─── Click ────────────────────────────────────────────────────────────────────
+// ─── Event listeners ──────────────────────────────────────────────────────────
 
 document.addEventListener('click', e => {
   push({ timestamp_ms: ts(), event_type: 'click',
@@ -39,8 +44,6 @@ document.addEventListener('click', e => {
     duration_ms: null, is_error: false,
     metadata: { tag: e.target?.tagName?.toLowerCase() } });
 }, true);
-
-// ─── Scroll ───────────────────────────────────────────────────────────────────
 
 let lastScroll = 0;
 document.addEventListener('scroll', () => {
@@ -53,8 +56,6 @@ document.addEventListener('scroll', () => {
     screen_id: window.location.pathname,
     duration_ms: null, is_error: false, metadata: {} });
 }, true);
-
-// ─── Input ────────────────────────────────────────────────────────────────────
 
 document.addEventListener('focusin', e => {
   if (!['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName)) return;
@@ -74,8 +75,6 @@ document.addEventListener('blur', e => {
     metadata: { input_type: e.target.type } });
 }, true);
 
-// ─── Mouse trajectory (sampled every 500ms) ───────────────────────────────────
-
 let mouseSampleTimer = null;
 document.addEventListener('mousemove', e => {
   lastMouseX = e.clientX; lastMouseY = e.clientY;
@@ -90,25 +89,14 @@ document.addEventListener('mousemove', e => {
   }, 500);
 }, true);
 
-// ─── SPA navigation ───────────────────────────────────────────────────────────
-
-let lastPath = window.location.pathname;
-new MutationObserver(() => {
-  if (window.location.pathname !== lastPath) {
-    push({ timestamp_ms: ts(), event_type: 'navigation',
-      element_id: null, x: null, y: null, value: null,
-      screen_id: window.location.pathname, duration_ms: null, is_error: false,
-      metadata: { from: lastPath, to: window.location.pathname } });
-    lastPath = window.location.pathname;
-  }
-}).observe(document, { subtree: true, childList: true });
-
 // ─── Messages from background ─────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'start') {
     isRecording = true;
-    sessionStartMs = Date.now();
+    // Use global session start from background — not Date.now()
+    // This ensures all pages in a session share the same time reference
+    sessionStartMs = msg.sessionStart || Date.now();
     sendResponse({ ok: true });
   }
   if (msg.action === 'stop') {

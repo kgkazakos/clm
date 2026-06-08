@@ -1,16 +1,25 @@
 /**
- * CLM Session Logger — background service worker v4
+ * CLM Session Logger — background service worker v5
  *
- * Uses chrome.storage.session to persist recording state and events.
- * This survives service worker termination (a Chrome MV3 limitation
- * where in-memory variables are lost after ~30s of inactivity).
+ * Key fixes from v4:
+ * 1. Global session clock: sessionStart is stored in chrome.storage.session
+ *    and sent to every content script so timestamps are absolute across
+ *    the full session, not relative to individual page loads.
+ *
+ * 2. chrome.webNavigation: replaces MutationObserver pathname detection.
+ *    webNavigation.onCompleted fires on full page loads (traditional sites).
+ *    webNavigation.onHistoryStateUpdated fires on SPA route changes
+ *    (React, Vue, Angular, Next.js) where pathname may not change.
+ *    Together they cover both traditional multi-page and SPA architectures.
  */
 
 async function getState() {
-  const data = await chrome.storage.session.get(['isRecording', 'events', 'sessionStart']);
+  const data = await chrome.storage.session.get([
+    'isRecording', 'events', 'sessionStart'
+  ]);
   return {
-    isRecording: data.isRecording || false,
-    events: data.events || [],
+    isRecording:  data.isRecording  || false,
+    events:       data.events       || [],
     sessionStart: data.sessionStart || null,
   };
 }
@@ -18,6 +27,8 @@ async function getState() {
 async function setState(patch) {
   await chrome.storage.session.set(patch);
 }
+
+// ─── Message handler ──────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
@@ -35,13 +46,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.action === 'start') {
     (async () => {
-      await setState({ isRecording: true, events: [], sessionStart: Date.now() });
-      // Tell the active tab's content script to start
+      const sessionStart = Date.now();
+      await setState({ isRecording: true, events: [], sessionStart });
+      // Notify active tab with global session start time
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       for (const tab of tabs) {
-        chrome.tabs.sendMessage(tab.id, { action: 'start' }).catch(() => {});
+        chrome.tabs.sendMessage(tab.id, { action: 'start', sessionStart })
+          .catch(() => {});
       }
-      sendResponse({ status: 'recording' });
+      sendResponse({ status: 'recording', sessionStart });
     })();
     return true;
   }
@@ -70,12 +83,55 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true;
 });
 
-// When a new page loads mid-session, tell its content script to start
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
-  if (changeInfo.status === 'complete') {
-    const state = await getState();
-    if (state.isRecording) {
-      chrome.tabs.sendMessage(tabId, { action: 'start' }).catch(() => {});
-    }
-  }
+// ─── Navigation detection — traditional multi-page (onCompleted) ──────────────
+
+chrome.webNavigation.onCompleted.addListener(async (details) => {
+  // Only main frame, not iframes
+  if (details.frameId !== 0) return;
+  const state = await getState();
+  if (!state.isRecording) return;
+
+  // Tell the newly loaded content script to start recording
+  // Pass the global sessionStart so timestamps are absolute
+  chrome.tabs.sendMessage(details.tabId, {
+    action: 'start',
+    sessionStart: state.sessionStart,
+  }).catch(() => {});
+
+  // Push a navigation event from the background
+  state.events.push({
+    timestamp_ms: Date.now() - state.sessionStart,
+    event_type: 'navigation',
+    element_id: null,
+    x: null,
+    y: null,
+    value: null,
+    screen_id: new URL(details.url).pathname,
+    duration_ms: null,
+    is_error: false,
+    metadata: { trigger: 'webNavigation.onCompleted', url: details.url },
+  });
+  await setState({ events: state.events });
+});
+
+// ─── Navigation detection — SPA route changes (onHistoryStateUpdated) ─────────
+
+chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
+  if (details.frameId !== 0) return;
+  const state = await getState();
+  if (!state.isRecording) return;
+
+  state.events.push({
+    timestamp_ms: Date.now() - state.sessionStart,
+    event_type: 'navigation',
+    element_id: null,
+    x: null,
+    y: null,
+    value: null,
+    screen_id: new URL(details.url).pathname,
+    duration_ms: null,
+    is_error: false,
+    metadata: { trigger: 'webNavigation.onHistoryStateUpdated', url: details.url },
+  });
+  await setState({ events: state.events });
 });
