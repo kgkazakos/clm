@@ -1,0 +1,94 @@
+{
+  "generated_at": "2026-06-08T03:03:05.047231Z",
+  "session_id": "7ac4e342",
+  "format_used": "canonical",
+  "context": {
+    "task_description": "Dell laptop configuration",
+    "interface_type": "web_app",
+    "participant_id": null
+  },
+  "measurement": {
+    "composite_index": 46.8,
+    "band": "\ud83d\udfe1 Moderate",
+    "event_count": 285,
+    "duration_ms": 36820.0,
+    "signals": {
+      "dwell_time": {
+        "score": 46.2,
+        "weight": 0.14,
+        "weighted_contribution": 6.47,
+        "interpretation": "Mean dwell 1308ms across 6 events; 50% exceed 1000ms threshold (Jiang et al., 2015 deliberation indicator)",
+        "literature_anchor": "Jiang et al. (2015)"
+      },
+      "error_recovery": {
+        "score": 0.0,
+        "weight": 0.18,
+        "weighted_contribution": 0.0,
+        "interpretation": "0 error events (0.0% of total); 0 slow recoveries (>5s) (Sweller, 1988 schema incompleteness indicator)",
+        "literature_anchor": "Sweller (1988)"
+      },
+      "hesitation": {
+        "score": 23.6,
+        "weight": 0.16,
+        "weighted_contribution": 3.78,
+        "interpretation": "1 hesitations (>2000ms) in 284 inter-event gaps (0.4% rate); mean hesitation 3882ms (Paas & van Merri\u00ebnboer, 1994 decision bottleneck indicator)",
+        "literature_anchor": "Paas & van Merri\u00ebnboer (1994)"
+      },
+      "task_switching": {
+        "score": 44.2,
+        "weight": 0.18,
+        "weighted_contribution": 7.96,
+        "interpretation": "6 screen changes (2.1% of events); 4 rapid switches (<3s) (Sweller et al., 1998 split-attention effect indicator)",
+        "literature_anchor": "Sweller et al. (1998)"
+      },
+      "mouse_trajectory": {
+        "score": 99.9,
+        "weight": 0.2,
+        "weighted_contribution": 19.98,
+        "interpretation": "Path efficiency ratio 0.00 (straight-line 0.050 / actual 57.479) across 191 positioned events (Guo et al., 2016 attentional switching indicator)",
+        "literature_anchor": "Guo et al. (2016)"
+      },
+      "scroll_behaviour": {
+        "score": 50.0,
+        "weight": 0.06,
+        "weighted_contribution": 3.0,
+        "interpretation": "81 scroll events; velocity std 4519.4px; 0 direction reversals (0.0% rate) (Rodrigues et al., 2020 spatial disorientation indicator)",
+        "literature_anchor": "Rodrigues et al. (2020)"
+      },
+      "input_retry": {
+        "score": 70.0,
+        "weight": 0.08,
+        "weighted_contribution": 5.6,
+        "interpretation": "3 retry sequences across 3 input elements (100.0% retry rate); mean retry depth 2.0 (Sweller, 1988 working memory strain indicator)",
+        "literature_anchor": "Sweller (1988)"
+      }
+    }
+  },
+  "interpretation": {
+    "dominant_load_type": "extraneous",
+    "confidence": "Moderate",
+    "classification_reasoning": "The participant exhibits extreme mouse path inefficiency (99.9/100 score with a 0.00 efficiency ratio) and an elevated input retry rate (70.0/100 score with 100% retry across elements), indicating severe friction with UI affordances. Combined with rapid task switches (44.2/100), these signals strongly suggest the interface layout is forcing unnecessary visual search and working memory strain, despite the lack of formal error recoveries.",
+    "hypothesis": "The physical separation of laptop component options and their corresponding configuration details creates a split-attention effect, driving erratic cursor trajectories and repeated input adjustments.",
+    "hypothesis_space": [
+      {
+        "intervention": "Integrating mutually dependent text and graphical information physically close together to reduce visual search.",
+        "citation": "Sweller, Chandler, Tierney & Cooper (1990) \u2014 Cognitive load as a factor in the structuring of technical material",
+        "load_type_addressed": "extraneous"
+      },
+      {
+        "intervention": "Replacing multi-step inputs or complex dropdowns with exposed, single-click radio buttons to reduce working memory strain and interaction cost.",
+        "citation": "Bargas-Avila et al. (2010) \u2014 Online form design: web pages or drop-down menus?",
+        "load_type_addressed": "extraneous"
+      },
+      {
+        "intervention": "Implementing visual cueing to guide user attention directly to relevant state changes after an input is modified.",
+        "citation": "Van Gog (2014) \u2014 The signaling (or cueing) principle in multimedia learning",
+        "load_type_addressed": "extraneous"
+      }
+    ],
+    "uncertainty_flags": [
+      "The extremely low mouse path efficiency (0.00) may be an artifact of trackpad usage characteristics or idle cursor wandering rather than active visual search.",
+      "The 100% input retry rate might capture natural exploratory behavior, such as toggling laptop specs back and forth to compare prices, rather than representing genuine interface usability failures."
+    ]
+  }
+}

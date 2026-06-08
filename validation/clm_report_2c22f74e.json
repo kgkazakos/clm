@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-06-08T03:02:05.907971Z",
+  "session_id": "2c22f74e",
+  "format_used": "canonical",
+  "context": {
+    "task_description": "Mailchimp signup flow",
+    "interface_type": "web_app",
+    "participant_id": null
+  },
+  "measurement": {
+    "composite_index": 37.4,
+    "band": "\ud83d\udfe2 Low",
+    "event_count": 81,
+    "duration_ms": 11962.0,
+    "signals": {
+      "dwell_time": {
+        "score": 100.0,
+        "weight": 0.14,
+        "weighted_contribution": 14.0,
+        "interpretation": "Mean dwell 5481ms across 2 events; 100% exceed 1000ms threshold (Jiang et al., 2015 deliberation indicator)",
+        "literature_anchor": "Jiang et al. (2015)"
+      },
+      "error_recovery": {
+        "score": 0.0,
+        "weight": 0.18,
+        "weighted_contribution": 0.0,
+        "interpretation": "0 error events (0.0% of total); 0 slow recoveries (>5s) (Sweller, 1988 schema incompleteness indicator)",
+        "literature_anchor": "Sweller (1988)"
+      },
+      "hesitation": {
+        "score": 13.6,
+        "weight": 0.16,
+        "weighted_contribution": 2.18,
+        "interpretation": "1 hesitations (>2000ms) in 80 inter-event gaps (1.2% rate); mean hesitation 2054ms (Paas & van Merri\u00ebnboer, 1994 decision bottleneck indicator)",
+        "literature_anchor": "Paas & van Merri\u00ebnboer (1994)"
+      },
+      "task_switching": {
+        "score": 0.0,
+        "weight": 0.18,
+        "weighted_contribution": 0.0,
+        "interpretation": "No navigation events detected \u2014 cannot compute task-switching",
+        "literature_anchor": "Sweller et al. (1998)"
+      },
+      "mouse_trajectory": {
+        "score": 98.5,
+        "weight": 0.2,
+        "weighted_contribution": 19.7,
+        "interpretation": "Path efficiency ratio 0.01 (straight-line 0.437 / actual 29.312) across 75 positioned events (Guo et al., 2016 attentional switching indicator)",
+        "literature_anchor": "Guo et al. (2016)"
+      },
+      "scroll_behaviour": {
+        "score": 25.4,
+        "weight": 0.06,
+        "weighted_contribution": 1.52,
+        "interpretation": "3 scroll events; velocity std 254.5px; 0 direction reversals (0.0% rate) (Rodrigues et al., 2020 spatial disorientation indicator)",
+        "literature_anchor": "Rodrigues et al. (2020)"
+      },
+      "input_retry": {
+        "score": 0.0,
+        "weight": 0.08,
+        "weighted_contribution": 0.0,
+        "interpretation": "0 retry sequences across 2 input elements (0.0% retry rate); mean retry depth 0.0 (Sweller, 1988 working memory strain indicator)",
+        "literature_anchor": "Sweller (1988)"
+      }
+    }
+  },
+  "interpretation": {
+    "dominant_load_type": "mixed",
+    "confidence": "Moderate",
+    "classification_reasoning": "The telemetry reveals conflicting indicators that prevent a single load classification. Maximum dwell time (100.0) with zero errors suggests intrinsic load from careful deliberation on signup requirements, yet highly inefficient mouse trajectories (98.5 score, 0.01 efficiency ratio) strongly indicate extraneous visual search. This combination of intense reading or evaluation with erratic pointer tracking points to multiple co-occurring load types rather than a unified source.",
+    "hypothesis": "It is hypothesized that the interface layout induces both intrinsic load from evaluating complex signup requirements and extraneous load from spatial visual search, driving high dwell times and erratic mouse tracking without causing critical task failures.",
+    "hypothesis_space": [
+      {
+        "intervention": "Spatially integrating related text, pricing tiers, and interactive input elements to eliminate visual scanning.",
+        "citation": "Chandler & Sweller (1991) \u2014 Split-attention effect in cognitive load theory",
+        "load_type_addressed": "extraneous"
+      },
+      {
+        "intervention": "Breaking the complex signup and plan evaluation process into smaller, sequential, user-paced steps.",
+        "citation": "Mayer & Chandler (2001) \u2014 Segmenting effect in multimedia learning",
+        "load_type_addressed": "intrinsic"
+      },
+      {
+        "intervention": "Using explicit visual cues (e.g., highlighting, contrast) to guide attention directly to primary input fields and reduce extraneous search.",
+        "citation": "Jeung, Chandler, & Sweller (1997) \u2014 The role of visual indicators in reducing visual search load",
+        "load_type_addressed": "extraneous"
+      }
+    ],
+    "uncertainty_flags": [
+      "Task-switching score is 0.0 due to a lack of detected navigation events, which may indicate a telemetry capture failure in single-page application (SPA) architectures rather than actual linear progression.",
+      "Hesitation is low (13.6) despite very high dwell time (100.0); the 2000ms threshold for hesitation might fail to capture continuous reading behavior where the user slowly scrolls or moves the mouse without fully pausing.",
+      "Without eye-tracking data, the extremely low mouse path efficiency (0.01 ratio) cannot definitively be separated between extraneous wandering and intrinsic reading-tracking behavior."
+    ]
+  }
+}

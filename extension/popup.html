@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 280px; font-family: -apple-system, sans-serif; background: #0c0c0e; color: #e8e8e8; padding: 16px; }
+  .wordmark { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #6b6b7a; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .wordmark span { color: #7c6bff; }
+  .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: #3a3a45; flex-shrink: 0; }
+  .dot.recording { background: #ef5b5b; animation: pulse 1.2s infinite; }
+  .dot.rating { background: #efb85b; }
+  .dot.done { background: #5bef9a; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .status-text { font-size: 12px; color: #6b6b7a; }
+  .count { font-size: 11px; font-family: monospace; color: #7c6bff; margin-left: auto; }
+  .field { margin-bottom: 10px; }
+  label { display: block; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #6b6b7a; margin-bottom: 4px; }
+  input[type=text] { width: 100%; background: #1a1a1f; border: 1px solid rgba(255,255,255,0.07); border-radius: 4px; padding: 6px 10px; color: #e8e8e8; font-size: 12px; outline: none; }
+  input[type=text]:focus { border-color: #7c6bff; }
+  .btn { width: 100%; border: none; border-radius: 4px; padding: 10px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; margin-bottom: 8px; font-family: monospace; }
+  .btn-start { background: #7c6bff; color: #fff; }
+  .btn-start:hover { background: #9d8fff; }
+  .btn-stop { background: #1a1a1f; border: 1px solid rgba(255,255,255,0.07); color: #e8e8e8; }
+  .btn-stop:hover { border-color: rgba(255,255,255,0.18); }
+  .btn-export { background: #5bef9a; color: #0c0c0e; font-weight: 600; }
+  .btn-export:hover { background: #7df7b2; }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .hint { font-size: 10px; color: #3a3a45; text-align: center; margin-top: 4px; word-break: break-all; }
+  .tlx-header { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #7c6bff; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  .tlx-item { margin-bottom: 12px; }
+  .tlx-label-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .tlx-name { font-size: 10px; color: #e8e8e8; font-weight: 500; }
+  .tlx-desc { font-size: 9px; color: #6b6b7a; margin-bottom: 4px; line-height: 1.4; }
+  .tlx-value { font-size: 10px; font-family: monospace; color: #7c6bff; min-width: 28px; text-align: right; }
+  input[type=range] { width: 100%; height: 2px; -webkit-appearance: none; background: #1a1a1f; border-radius: 1px; outline: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #7c6bff; cursor: pointer; }
+  .tlx-scale-labels { display: flex; justify-content: space-between; font-size: 8px; color: #3a3a45; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<div id="recordingView">
+  <div class="wordmark">CLM <span>Logger</span></div>
+  <div class="status-row">
+    <div class="dot" id="dot"></div>
+    <span class="status-text" id="statusText">Ready</span>
+    <span class="count" id="eventCount"></span>
+  </div>
+  <div class="field">
+    <label>Task description</label>
+    <input type="text" id="taskDesc" placeholder="e.g. Complete checkout">
+  </div>
+  <div class="field">
+    <label>Participant ID</label>
+    <input type="text" id="participantId" placeholder="P01">
+  </div>
+  <button class="btn btn-start" id="startBtn">Start Recording</button>
+  <button class="btn btn-stop" id="stopBtn" disabled>Stop + Rate</button>
+  <div class="hint" id="hint">Captures clicks, scroll, input, mouse movement</div>
+</div>
+
+<div id="tlxView" style="display:none">
+  <div class="wordmark">NASA-TLX <span>Rating</span></div>
+  <div class="tlx-header">Rate immediately — before doing anything else</div>
+
+  <div class="tlx-item">
+    <div class="tlx-label-row"><span class="tlx-name">Mental Demand</span><span class="tlx-value" id="val-mental">50</span></div>
+    <div class="tlx-desc">How mentally demanding was the task?</div>
+    <input type="range" min="0" max="100" value="50" id="mental">
+    <div class="tlx-scale-labels"><span>Low</span><span>High</span></div>
+  </div>
+
+  <div class="tlx-item">
+    <div class="tlx-label-row"><span class="tlx-name">Physical Demand</span><span class="tlx-value" id="val-physical">50</span></div>
+    <div class="tlx-desc">How physically demanding was the task?</div>
+    <input type="range" min="0" max="100" value="50" id="physical">
+    <div class="tlx-scale-labels"><span>Low</span><span>High</span></div>
+  </div>
+
+  <div class="tlx-item">
+    <div class="tlx-label-row"><span class="tlx-name">Temporal Demand</span><span class="tlx-value" id="val-temporal">50</span></div>
+    <div class="tlx-desc">How hurried or rushed was the pace?</div>
+    <input type="range" min="0" max="100" value="50" id="temporal">
+    <div class="tlx-scale-labels"><span>Low</span><span>High</span></div>
+  </div>
+
+  <div class="tlx-item">
+    <div class="tlx-label-row"><span class="tlx-name">Performance</span><span class="tlx-value" id="val-performance">50</span></div>
+    <div class="tlx-desc">How successful were you? (0 = perfect)</div>
+    <input type="range" min="0" max="100" value="50" id="performance">
+    <div class="tlx-scale-labels"><span>Perfect</span><span>Failure</span></div>
+  </div>
+
+  <div class="tlx-item">
+    <div class="tlx-label-row"><span class="tlx-name">Effort</span><span class="tlx-value" id="val-effort">50</span></div>
+    <div class="tlx-desc">How hard did you work to achieve this?</div>
+    <input type="range" min="0" max="100" value="50" id="effort">
+    <div class="tlx-scale-labels"><span>Low</span><span>High</span></div>
+  </div>
+
+  <div class="tlx-item">
+    <div class="tlx-label-row"><span class="tlx-name">Frustration</span><span class="tlx-value" id="val-frustration">50</span></div>
+    <div class="tlx-desc">How irritated or stressed were you?</div>
+    <input type="range" min="0" max="100" value="50" id="frustration">
+    <div class="tlx-scale-labels"><span>Low</span><span>High</span></div>
+  </div>
+
+  <button class="btn btn-export" id="exportBtn">Export JSON + Ratings</button>
+  <div class="hint" id="tlxHint">Ratings will be embedded in the session JSON</div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
