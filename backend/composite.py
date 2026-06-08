@@ -1,31 +1,28 @@
 """
 Composite cognitive load index calculator.
 
-Applies theory-derived weights (defined in config.py) to the seven
-signal scores to produce a single composite index (0–100).
+Applies theory-derived weights (config.py) to the seven signal scores.
+Signals that return 0.0 due to insufficient event density (score == 0.0
+AND interpretation contains "excluded from composite") are removed from
+the dot product and remaining weights are renormalised to sum to 1.0.
 
-The weighting rationale is documented in config.py with full literature
-citations. This module is intentionally simple — the intellectual
-contribution is in the signal calculators and the weight derivation,
-not in the aggregation arithmetic.
+This ensures that a session with, say, no qualifying dwell events does not
+have its composite artificially deflated by a zero contribution from a
+signal that simply had no data — distinct from a signal that genuinely
+measured zero load.
 """
 
 from config import SIGNAL_WEIGHTS
-from models import (
-    InteractionEvent,
-    SignalBreakdown,
-    SignalScore,
-)
+from models import InteractionEvent, SignalBreakdown, SignalScore
 from signals import (
     dwell,
     error_recovery,
     hesitation,
-    task_switching,
     mouse_trajectory,
     scroll_behaviour,
+    task_switching,
     input_retry,
 )
-
 
 _LITERATURE_ANCHORS: dict[str, str] = {
     "dwell_time":        "Jiang et al. (2015)",
@@ -37,16 +34,20 @@ _LITERATURE_ANCHORS: dict[str, str] = {
     "input_retry":       "Sweller (1988)",
 }
 
+_EXCLUDED_MARKER = "excluded from composite"
+
+
+def _is_excluded(score: float, interpretation: str) -> bool:
+    """True when a signal returned insufficient-data sentinel."""
+    return score == 0.0 and _EXCLUDED_MARKER in interpretation
+
 
 def calculate(events: list[InteractionEvent]) -> tuple[float, SignalBreakdown]:
     """
-    Run all seven signal calculators and produce the composite index.
-
-    Returns:
-        composite_index: float (0–100)
-        breakdown: SignalBreakdown with per-signal scores and metadata
+    Run all seven signal calculators, renormalise weights for any signals
+    excluded due to insufficient event density, and compute composite index.
     """
-    results: dict[str, tuple[float, str]] = {
+    raw_results: dict[str, tuple[float, str]] = {
         "dwell_time":       dwell.calculate(events),
         "error_recovery":   error_recovery.calculate(events),
         "hesitation":       hesitation.calculate(events),
@@ -56,21 +57,37 @@ def calculate(events: list[InteractionEvent]) -> tuple[float, SignalBreakdown]:
         "input_retry":      input_retry.calculate(events),
     }
 
+    # Identify active signals (sufficient event density)
+    active = {
+        name for name, (score, interp) in raw_results.items()
+        if not _is_excluded(score, interp)
+    }
+
+    # Renormalise weights across active signals only
+    active_weight_sum = sum(SIGNAL_WEIGHTS[name] for name in active)
+    renormalised: dict[str, float] = {}
+    for name in raw_results:
+        if name in active:
+            renormalised[name] = SIGNAL_WEIGHTS[name] / active_weight_sum
+        else:
+            renormalised[name] = 0.0
+
+    # Build signal scores and composite
     signal_scores: dict[str, SignalScore] = {}
     composite = 0.0
 
-    for signal_name, (score, interpretation) in results.items():
-        weight = SIGNAL_WEIGHTS[signal_name]
+    for name, (score, interpretation) in raw_results.items():
+        weight = renormalised[name]
         weighted = score * weight
         composite += weighted
 
-        signal_scores[signal_name] = SignalScore(
-            signal=signal_name,
+        signal_scores[name] = SignalScore(
+            signal=name,
             score=score,
-            weight=weight,
+            weight=round(weight, 4),
             weighted_contribution=round(weighted, 2),
             interpretation=interpretation,
-            literature_anchor=_LITERATURE_ANCHORS[signal_name],
+            literature_anchor=_LITERATURE_ANCHORS[name],
         )
 
     breakdown = SignalBreakdown(

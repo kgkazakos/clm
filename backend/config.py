@@ -9,20 +9,26 @@ Set LLM_PROVIDER in your .env to switch interpretation layer:
 
 Theory-derived signal weights (v1.0 — primary published instrument):
 Each weight reflects the documented effect size of that telemetry signal
-as a cognitive load proxy in the source literature. Weights are normalised
-effect sizes, reviewed against NASA-TLX mental demand subscale correlations.
+as a cognitive load proxy in the source literature.
 
-These are the weights used in the published validation study and reported
-in the whitepaper. They should not be changed without a formal validation
-study (N ≥ 20) justifying the adjustment.
+Minimum event density:
+Each signal calculator requires a minimum number of qualifying events
+(MIN_SIGNAL_EVENTS) before returning a score. If a signal does not meet
+this threshold, it returns 0.0 and is excluded from the composite index
+calculation. The remaining signal weights are renormalised to sum to 1.0.
+
+Rationale: A signal derived from n=2 events carries the same mathematical
+weight as one derived from n=50 events under a fixed-weight composite.
+This creates instability — two unusually long dwell events can produce a
+score of 100.0 that dominates the composite. The minimum threshold prevents
+low-density signals from skewing the aggregate without representing a
+reliable behavioral pattern.
+
+The threshold of 3 qualifying events is a conservative lower bound.
+Empirical calibration against the N=20 validation study is planned.
 
 Hypothesised v1.1 recalibration (NOT active — pending N=20 validation):
-The initial validation study (N=1) observed mouse_trajectory saturation in
-both low-load and high-load sessions (scores 98.5 and 99.9), providing no
-discriminant signal. A hypothesised recalibration (mouse_trajectory: 0.20→0.12,
-task_switching: 0.18→0.22, hesitation: 0.16→0.20) is documented here but
-NOT applied, as adjusting weights based on a single biased trial constitutes
-overfitting. This recalibration will be evaluated in the N=20 study.
+See commented-out block below for details.
 
 Literature anchors:
 - Sweller (1988): Cognitive load during problem solving
@@ -72,37 +78,30 @@ if not _key_value:
 # ─── Signal weights v1.0 (primary — literature-derived) ──────────────────────
 
 SIGNAL_WEIGHTS: dict[str, float] = {
-    # Guo et al. (2016): strongest single predictor (r=0.71 with NASA-TLX)
     "mouse_trajectory": 0.20,
-
-    # Sweller (1988): direct working memory overload indicator
     "error_recovery":   0.18,
-
-    # Sweller et al. (1998): split-attention effect
     "task_switching":   0.18,
-
-    # Paas & van Merriënboer (1994): hesitation duration predicts effort ratings
     "hesitation":       0.16,
-
-    # Jiang et al. (2015): dwell time and perceived task difficulty (r=0.65)
     "dwell_time":       0.14,
-
-    # Sweller (1988): working memory strain indicator
     "input_retry":      0.08,
-
-    # Rodrigues et al. (2020): scroll variance and spatial disorientation
     "scroll_behaviour": 0.06,
 }
 
 assert abs(sum(SIGNAL_WEIGHTS.values()) - 1.0) < 1e-9, "Weights must sum to 1.0"
 
-# ─── Hypothesised v1.1 weights (NOT active — see docstring above) ─────────────
+# ─── Minimum qualifying events per signal ────────────────────────────────────
+# Signals with fewer than this many qualifying events return 0.0 and are
+# excluded from the composite calculation. Prevents n=2 events from
+# dominating the composite through the fixed-weight dot product.
+MIN_SIGNAL_EVENTS: int = 3
+
+# ─── Hypothesised v1.1 weights (NOT active — see docstring) ──────────────────
 # HYPOTHESISED_V1_1_WEIGHTS = {
-#     "task_switching":   0.22,  # +0.04 — strong discriminant in pilot
-#     "hesitation":       0.20,  # +0.04 — strong discriminant in pilot
+#     "task_switching":   0.22,
+#     "hesitation":       0.20,
 #     "error_recovery":   0.18,
 #     "dwell_time":       0.14,
-#     "mouse_trajectory": 0.12,  # -0.08 — saturated in pilot, context boundary
+#     "mouse_trajectory": 0.12,
 #     "input_retry":      0.08,
 #     "scroll_behaviour": 0.06,
 # }

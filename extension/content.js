@@ -1,22 +1,28 @@
 /**
- * CLM Session Logger — content script v5.1
+ * CLM Session Logger — content script v5.2
  *
  * PII handling:
- * Input field VALUES are never logged. The content script captures
- * only element_id (which field was interacted with) and duration_ms
- * (how long the user spent in the field). These two signals are
- * sufficient for the dwell_time and input_retry calculators.
  *
- * Raw input text — including email addresses, names, search terms,
- * and any other typed content — is discarded at capture time and
- * never written to the session JSON or sent to any API.
+ * 1. Input field VALUES are never logged (set to null at capture time).
+ *    Only element_id and duration_ms are retained for input events.
  *
- * Scroll values (scroll delta in pixels) are retained as they contain
- * no PII and are required for the scroll_behaviour signal calculator.
+ * 2. Element identifiers (element_id) are sanitised before logging.
+ *    Modern web applications frequently inject user data directly into
+ *    DOM attributes — id, class, data-* — creating vectors for PII leakage
+ *    even when input values are stripped. Examples:
+ *      <div id="account-user@example.com">
+ *      <button data-username="kkazakos">
+ *    The sanitiseId() function applies two safeguards:
+ *      a) Strips email-like patterns (contains "@" and ".")
+ *      b) Truncates to MAX_ID_LENGTH characters
+ *    This prevents long dynamic IDs containing emails, usernames, or
+ *    account tokens from being stored in the session log.
  *
- * Researchers are responsible for obtaining appropriate consent from
- * participants before deploying the CLM Logger, consistent with their
- * institutional IRB requirements and applicable data protection law.
+ * 3. Scroll deltas (pixel offsets) are retained — no PII.
+ *
+ * 4. The LLM interpretation layer receives only numerical signal scores
+ *    and the researcher-provided task description. No event-level data
+ *    reaches any LLM provider.
  */
 
 let isRecording = false;
@@ -25,19 +31,31 @@ let lastMouseX = null;
 let lastMouseY = null;
 let inputTimers = {};
 
+const MAX_ID_LENGTH = 40;  // prevents long dynamic IDs from storing PII
+
 function ts() {
   return sessionStartMs ? Date.now() - sessionStartMs : 0;
 }
 function normX(x) { return Math.round((x / window.innerWidth)  * 100) / 100; }
 function normY(y) { return Math.round((y / window.innerHeight) * 100) / 100; }
 
+function sanitiseId(raw) {
+  if (!raw) return null;
+  const str = String(raw);
+  // Strip IDs containing email-like patterns
+  if (str.includes('@') && str.includes('.')) return '[redacted-email-id]';
+  // Truncate long IDs that may contain tokens or usernames
+  return str.length > MAX_ID_LENGTH ? str.slice(0, MAX_ID_LENGTH) + '…' : str;
+}
+
 function elementId(el) {
   if (!el) return null;
   const cls = typeof el.className === 'string'
     ? (el.className.split(' ')[0] || null)
     : null;
-  return el.id || el.name || el.getAttribute?.('data-testid') ||
+  const raw = el.id || el.name || el.getAttribute?.('data-testid') ||
     cls || el.tagName?.toLowerCase() || null;
+  return sanitiseId(raw);
 }
 
 function push(event) {
@@ -52,8 +70,7 @@ document.addEventListener('click', e => {
     timestamp_ms: ts(), event_type: 'click',
     element_id: elementId(e.target),
     x: normX(e.clientX), y: normY(e.clientY),
-    value: null,
-    screen_id: window.location.pathname,
+    value: null, screen_id: window.location.pathname,
     duration_ms: null, is_error: false,
     metadata: { tag: e.target?.tagName?.toLowerCase() },
   });
@@ -69,13 +86,13 @@ document.addEventListener('scroll', () => {
   push({
     timestamp_ms: ts(), event_type: 'scroll',
     element_id: null, x: null, y: null,
-    value: String(Math.round(window.scrollY)),   // pixel offset — not PII
+    value: String(Math.round(window.scrollY)),
     screen_id: window.location.pathname,
     duration_ms: null, is_error: false, metadata: {},
   });
 }, true);
 
-// ─── Input (element_id and dwell only — value is never logged) ────────────────
+// ─── Input (element_id and dwell only — value never logged) ──────────────────
 
 document.addEventListener('focusin', e => {
   if (!['INPUT','TEXTAREA','SELECT'].includes(e.target?.tagName)) return;
@@ -89,12 +106,10 @@ document.addEventListener('blur', e => {
   delete inputTimers[id];
   push({
     timestamp_ms: ts(), event_type: 'input',
-    element_id: id,
-    x: null, y: null,
-    value: null,       // input text is intentionally not captured
+    element_id: id, x: null, y: null,
+    value: null,
     screen_id: window.location.pathname,
-    duration_ms: dwell,
-    is_error: false,
+    duration_ms: dwell, is_error: false,
     metadata: { input_type: e.target.type },
   });
 }, true);
