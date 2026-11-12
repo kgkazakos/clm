@@ -3,7 +3,7 @@ Configuration for the Cognitive Load Monitor.
 
 LLM Provider:
 Set LLM_PROVIDER in your .env to switch interpretation layer:
-  gemini    — Gemini 3.1 Pro (default)
+  gemini    — Gemini 4 Argon (default)
   openai    — GPT-4o
   anthropic — Claude Sonnet
 
@@ -49,7 +49,7 @@ load_dotenv()
 LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "gemini").lower()
 
 GEMINI_API_KEY: str     = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL: str       = "gemini-3.1-pro-preview"
+GEMINI_MODEL: str       = "gemini-4-argon"
 
 OPENAI_API_KEY: str     = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL: str       = "gpt-4o"
